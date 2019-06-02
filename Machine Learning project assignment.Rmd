@@ -1,0 +1,155 @@
+---
+title: "Project-Machine Learning"
+author: "Guy Merlin Fomen"
+date: "2 juin 2019"
+output: html_document
+---
+
+#Synopsis
+
+In this project, we will use machine learning to quantify how well people do a particular activity.
+
+## Loading and reading Data
+```{r, cache=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile ="training.csv")
+training=read.csv("training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile ="testing.csv")
+testing=read.csv("testing.csv")
+```
+
+## Exploratory Data Analysis
+
+```{r}
+str(training)
+```
+
+Some variables have NA and many fields empty. Let's remove the non-significants variables.
+
+```{r, cache=TRUE}
+n0=dim(training)[1]
+n0ind <- vector()
+for(i in 1:160){
+  if(sum(training[,i] == ""|is.na(training[,i]))>0.9*n0) n0ind[i]=i
+}
+colrm=n0ind[!is.na(n0ind)]
+### working with training
+training2=training[, -colrm]
+training3=training2[,-(1:7)]# no impact on classe
+### working the testing
+testing2=testing[,-colrm]
+testing3=testing2[,-(1:7)] ## no impact on classe
+dim(training3);dim(testing3)
+```
+
+Let's split the training data training3 into a training part and a testing one. 
+
+```{r, cache= TRUE}
+library(caret)
+indtrain= createDataPartition(training3$classe, p=0.75,
+                              list = FALSE)
+trainingData=training3[indtrain,]
+testingData=training3[-indtrain,]
+dim(trainingData)
+dim(testingData)
+```
+
+## Building a Model
+#### Cross-validation control.
+
+```{r, cache=TRUE}
+ctrl= trainControl(method="cv", number=5, savePredictions = TRUE)
+```
+
+#### 1. Classification Tree Model
+
+```{r, cache= TRUE}
+modtree = train(classe~., data=trainingData, method="rpart",
+                trControl=ctrl)
+predtree = predict(modtree,testingData)
+confusionMatrix(predtree,testingData$classe)$overall[1]
+```
+
+#### 2.Linear Discriminant Analysis
+
+```{r, cache= TRUE}
+modlda=train(classe~., data=trainingData, method="lda",
+             trControl=ctrl)
+predlda = predict(modlda,testingData)
+confusionMatrix(predlda,testingData$classe)$overall[1]
+```
+
+#### 3. K-Nearest Neighbors (KNN)
+
+```{r, cache=TRUE}
+modknn=train(classe~., data=trainingData, method="knn",
+             trControl=ctrl)
+predknn = predict(modknn,testingData)
+confusionMatrix(predknn,testingData$classe)$overall[1]
+```
+
+#### 4.Random Forest
+
+```{r, cache= TRUE}
+library(randomForest)
+library(gbm)
+modrf=train(classe~., data=trainingData, method="rf",
+            trControl=ctrl)
+predrf = predict(modrf,testingData)
+confusionMatrix(predrf,testingData$classe)$overall[1]
+```
+
+#### 5.Stochastic Gradient Boosting:generalized boosted modeling
+
+```{r, cache= TRUE,results= FALSE}
+library(gbm)
+modgbm=train(classe~., data=trainingData, method="gbm",
+             trControl=ctrl)
+predgbm = predict(modgbm,testingData)
+```
+
+```{r,cache=TRUE}
+confusionMatrix(predgbm,testingData$classe)$overall[1]
+```
+
+#### 6.SVM: Support Vector Machine
+
+```{r, cache= TRUE}
+modsvm=train(classe~., data=trainingData, method="svmRadial",
+             trControl=ctrl)
+predsvm = predict(modsvm,testingData)
+confusionMatrix(predsvm,testingData$classe)$overall[1]
+```
+
+####7. bagged CART
+
+```{r, cache= TRUE}
+modbag=train(classe~., data=trainingData, method="treebag",
+             trControl=ctrl)
+predbag = predict(modbag,testingData)
+confusionMatrix(predbag,testingData$classe)$overall[1]
+```
+
+###### Model selection
+
+```{r,cache=TRUE}
+modselect= resamples(list(tree=modtree, lda=modlda, 
+                          knn=modknn,gbm=modgbm, svm=modsvm, bag=modbag))
+```
+
+### Summary and Plot
+
+```{r, cache=TRUE}
+summary(modselect)
+dotplot(modselect)
+print(modbag)
+```
+
+
+
+#### Making Prediction
+#### Estimate skill of bag on the validation dataset
+
+```{r, cache=TRUE}
+predictions <- predict(modbag,testing3)
+predictions
+```
